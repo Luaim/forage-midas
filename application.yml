@@ -2,6 +2,19 @@ general:
   kafka-topic: trader-updates
 
 spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driverClassName: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: update
+    defer-datasource-initialization: true
+
   kafka:
     consumer:
       group-id: midas-core
@@ -11,7 +24,6 @@ spring:
       properties:
         spring.json.trusted.packages: com.jpmc.midascore.foundation
         spring.json.value.default.type: com.jpmc.midascore.foundation.Transaction
-
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
