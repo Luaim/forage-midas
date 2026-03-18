@@ -1,28 +1,32 @@
 package com.jpmc.midascore.component;
 
 import com.jpmc.midascore.entity.UserRecord;
+import com.jpmc.midascore.foundation.Incentive;
 import com.jpmc.midascore.foundation.Transaction;
 import com.jpmc.midascore.foundation.TransactionRecord;
 import com.jpmc.midascore.repository.TransactionRecordRepository;
 import com.jpmc.midascore.repository.UserRepository;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
 
 @Component
 public class KafkaTransactionListener {
 
     private final UserRepository userRepository;
     private final TransactionRecordRepository transactionRecordRepository;
+    private final RestTemplate restTemplate;
 
     public KafkaTransactionListener(UserRepository userRepository,
-                                    TransactionRecordRepository transactionRecordRepository) {
+                                    TransactionRecordRepository transactionRecordRepository,
+                                    RestTemplate restTemplate) {
         this.userRepository = userRepository;
         this.transactionRecordRepository = transactionRecordRepository;
+        this.restTemplate = restTemplate;
     }
 
     @KafkaListener(topics = "${general.kafka-topic}")
     public void listen(Transaction transaction) {
-
         UserRecord sender = userRepository.findById(transaction.getSenderId());
         UserRecord recipient = userRepository.findById(transaction.getRecipientId());
 
@@ -34,22 +38,32 @@ public class KafkaTransactionListener {
             return;
         }
 
+        Incentive incentiveResponse = restTemplate.postForObject(
+                "http://localhost:8080/incentive",
+                transaction,
+                Incentive.class
+        );
+
+        float incentiveAmount = 0.0f;
+        if (incentiveResponse != null) {
+            incentiveAmount = incentiveResponse.getAmount();
+        }
+
         sender.setBalance(sender.getBalance() - transaction.getAmount());
-        recipient.setBalance(recipient.getBalance() + transaction.getAmount());
+        recipient.setBalance(recipient.getBalance() + transaction.getAmount() + incentiveAmount);
 
         userRepository.save(sender);
         userRepository.save(recipient);
 
         TransactionRecord transactionRecord =
-                new TransactionRecord(sender, recipient, transaction.getAmount());
+                new TransactionRecord(sender, recipient, transaction.getAmount(), incentiveAmount);
 
         transactionRecordRepository.save(transactionRecord);
 
-        // Print Waldorf's balance
         Iterable<UserRecord> users = userRepository.findAll();
         for (UserRecord user : users) {
-            if ("waldorf".equals(user.getName())) {
-                System.out.println("WALDORF FINAL BALANCE: " + user.getBalance());
+            if ("wilbur".equals(user.getName())) {
+                System.out.println("WILBUR FINAL BALANCE: " + user.getBalance());
             }
         }
     }
